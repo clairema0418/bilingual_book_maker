@@ -2,7 +2,11 @@ version: "3.8"
 
 services:
   bilingual_book_maker:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - PLATFORM=linux/amd6
     container_name: bilingual_book_maker
     volumes:
       - ${folder_path}:/app/test_books
@@ -13,17 +17,19 @@ services:
       language: ${language}
       azure_api_base: ${azure_api_base}
       azure_deployment_id: ${azure_deployment_id}
+      prompt: ${prompt}
     command:
-      [
+      [f
         "--book_name",
         "${book_name}",
         "--openai_key",
         "${openai_key}",
-        "--test",
         "--language",
         "${language}",
         "--api_base",
         "${azure_api_base}",
         "--deployment_id",
         "${azure_deployment_id}",
+        "--prompt",
+        "${prompt}",
       ]
