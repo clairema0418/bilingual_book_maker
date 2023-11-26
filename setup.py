@@ -4,7 +4,7 @@ from setuptools import find_packages, setup
 
 packages = [
     "bs4",
-    "openai",
+    "openai==0.28",
     "litellm",
     "requests",
     "ebooklib",
