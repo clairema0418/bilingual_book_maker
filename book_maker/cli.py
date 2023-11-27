@@ -2,10 +2,11 @@ import argparse
 import json
 import os
 from os import environ as env
-
 from book_maker.loader import BOOK_LOADER_DICT
 from book_maker.translator import MODEL_DICT
 from book_maker.utils import LANGUAGES, TO_LANGUAGE_CODE
+
+import logging
 
 
 def parse_prompt_arg(prompt_arg):
@@ -375,6 +376,8 @@ So you are close to reaching the limit. You have to choose your own value, there
 
 
 def translate(input_options):
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
     translate_model_list = list(MODEL_DICT.keys())
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -583,8 +586,10 @@ So you are close to reaching the limit. You have to choose your own value, there
 
     options = parser.parse_args()
 
+    logger.info(f"book path: {input_options.book_name}")
+
     if not os.path.isfile(input_options.book_name):
-        print(f"Error: {input_options.book_name} does not exist.")
+        logger.error(f"Error: {input_options.book_name} does not exist.")
         exit(1)
 
     PROXY = options.proxy
