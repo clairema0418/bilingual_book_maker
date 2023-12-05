@@ -32,6 +32,7 @@ def handler(event, context):
             deployment_id=os.environ['deployment_id'],
             folder_path=os.environ['folder_path'],
             prompt=os.environ['prompt'],
+            single_translate=os.environ['single_translate'],
         )
 
         # 開始進行翻譯

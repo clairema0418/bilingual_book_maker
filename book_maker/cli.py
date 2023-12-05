@@ -667,7 +667,7 @@ So you are close to reaching the limit. You have to choose your own value, there
         is_test=options.test,
         test_num=options.test_num,
         prompt_config=parse_prompt_arg(options.prompt_arg),
-        single_translate=options.single_translate,
+        single_translate=input_options.single_translate,
         context_flag=options.context_flag,
         temperature=options.temperature,
     )

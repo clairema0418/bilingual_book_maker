@@ -4,7 +4,7 @@ services:
   bilingual_book_maker:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: DockerfileDev
       args:
         - PLATFORM=linux/amd6
     container_name: bilingual_book_maker
@@ -18,8 +18,9 @@ services:
       azure_api_base: ${azure_api_base}
       azure_deployment_id: ${azure_deployment_id}
       prompt: ${prompt}
+      single_translate: true
     command:
-      [f
+      [
         "--book_name",
         "${book_name}",
         "--openai_key",
@@ -30,6 +31,9 @@ services:
         "${azure_api_base}",
         "--deployment_id",
         "${azure_deployment_id}",
+        "--single_translate",
+        "${single_translate}",
         "--prompt",
         "${prompt}",
+        "--test",
       ]
