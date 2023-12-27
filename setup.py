@@ -12,6 +12,8 @@ packages = [
     "tqdm",
     "tiktoken",
     "PyDeepLX",
+    "document==1.0",
+    "python-docx"
 ]
 
 

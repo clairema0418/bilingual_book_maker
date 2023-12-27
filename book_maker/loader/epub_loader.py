@@ -16,6 +16,10 @@ from book_maker.utils import num_tokens_from_text, prompt_config_to_kwargs
 from .base_loader import BaseBookLoader
 from .helper import EPUBBookLoaderHelper, not_trans, is_text_link
 
+import boto3
+import logging
+s3 = boto3.client('s3')
+
 
 class EPUBBookLoader(BaseBookLoader):
     def __init__(
@@ -67,7 +71,8 @@ class EPUBBookLoader(BaseBookLoader):
             for item in obj.book.get_items():
                 if isinstance(item, epub.EpubNcx):
                     obj.out.writestr(
-                        "%s/%s" % (obj.book.FOLDER_NAME, item.file_name), obj._get_ncx()
+                        "%s/%s" % (obj.book.FOLDER_NAME,
+                                   item.file_name), obj._get_ncx()
                     )
                 elif isinstance(item, epub.EpubNav):
                     obj.out.writestr(
@@ -76,7 +81,8 @@ class EPUBBookLoader(BaseBookLoader):
                     )
                 elif item.manifest:
                     obj.out.writestr(
-                        "%s/%s" % (obj.book.FOLDER_NAME, item.file_name), item.content
+                        "%s/%s" % (obj.book.FOLDER_NAME,
+                                   item.file_name), item.content
                     )
                 else:
                     obj.out.writestr("%s" % item.file_name, item.content)
@@ -89,12 +95,14 @@ class EPUBBookLoader(BaseBookLoader):
             # tricky monkey patch for #71 if you don't know why please check the issue and ignore this
             # when upstream change will TODO fix this
             def _load_spine(obj):
-                spine = obj.container.find("{%s}%s" % (epub.NAMESPACES["OPF"], "spine"))
+                spine = obj.container.find(
+                    "{%s}%s" % (epub.NAMESPACES["OPF"], "spine"))
 
                 obj.book.spine = [
                     (t.get("idref"), t.get("linear", "yes")) for t in spine
                 ]
-                obj.book.set_direction(spine.get("page-progression-direction", None))
+                obj.book.set_direction(
+                    spine.get("page-progression-direction", None))
 
             epub.EpubReader._load_spine = _load_spine
             self.origin_book = epub.read_epub(self.epub_name)
@@ -169,7 +177,8 @@ class EPUBBookLoader(BaseBookLoader):
                     pt.extract()
 
             if any(
-                [not p.text, self._is_special_text(temp_p.text), not_trans(temp_p.text)]
+                [not p.text, self._is_special_text(
+                    temp_p.text), not_trans(temp_p.text)]
             ):
                 if i == len(p_list) - 1:
                     self.helper.deal_old(wait_p_list, self.single_translate)
@@ -314,7 +323,8 @@ class EPUBBookLoader(BaseBookLoader):
         return False
 
     def filter_nest_list(self, p_list, trans_taglist):
-        filtered_list = [p for p in p_list if not self.has_nest_child(p, trans_taglist)]
+        filtered_list = [
+            p for p in p_list if not self.has_nest_child(p, trans_taglist)]
         return filtered_list
 
     def process_item(
@@ -427,7 +437,8 @@ class EPUBBookLoader(BaseBookLoader):
             else len(bs(i.content, "html.parser").findAll(text=True))
             for i in all_items
         )
-        pbar = tqdm(total=self.test_num) if self.is_test else tqdm(total=all_p_length)
+        pbar = tqdm(total=self.test_num) if self.is_test else tqdm(
+            total=all_p_length)
         print()
         index = 0
         p_to_save_len = len(self.p_to_save)
@@ -451,7 +462,11 @@ class EPUBBookLoader(BaseBookLoader):
                     name, _ = os.path.splitext(self.epub_name)
                     epub.write_epub(f"{name}_bilingual.epub", new_book, {})
             name, _ = os.path.splitext(self.epub_name)
-            epub.write_epub(f"{name}_bilingual.epub", new_book, {})
+
+            self.save_file(
+                f"{Path(self.epub_name).parent}/{Path(self.epub_name).stem}_bilingual.epub",
+                new_book,
+            )
             if self.accumulated_num == 1:
                 pbar.close()
         except (KeyboardInterrupt, Exception) as e:
@@ -526,3 +541,29 @@ class EPUBBookLoader(BaseBookLoader):
                 pickle.dump(self.p_to_save, f)
         except Exception:
             raise Exception("can not save resume file")
+
+    def save_file(self, book_path, content):
+        if self.upload_to_s3:
+            try:
+                logger = logging.getLogger()
+                upload_path = '{}/{}.epub'.format(
+                    self.language_key, Path(self.txt_name).stem)
+                epub_file = epub.EpubBook()
+                epub_file.set_title({Path(self.txt_name).stem})
+                epub_file.set_language(self.language_key)
+                epub_file.add_item(epub.EpubHtml(
+                    content, title="Bilingual Content"))
+                epub_file.add_item(epub.EpubNcx())
+                epub_file.add_item(epub.EpubNav())
+                epub_file.spine = ["nav"]
+                epub_content = epub_file.to_string()
+                s3.put_object(Body=epub_content.encode('utf-8'),
+                              Bucket=self.bucket, Key=upload_path)
+                logger.info(f"upload file to s3: {upload_path}")
+            except:
+                raise Exception("can not upload file to s3")
+        else:
+            try:
+                epub.write_epub(f"{book_path}_bilingual.epub", content, {})
+            except:
+                raise Exception("can not save file")

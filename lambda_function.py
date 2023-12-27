@@ -25,7 +25,6 @@ def handler(event, context):
         language = os.environ['language']
         options = argparse.Namespace(
             book_name=download_path,
-            file_path=download_path,
             language=language,
             openai_key=os.environ['openai_key'],
             api_base=os.environ['api_base'],
@@ -33,15 +32,12 @@ def handler(event, context):
             folder_path=os.environ['folder_path'],
             prompt=os.environ['prompt'],
             single_translate=os.environ['single_translate'],
+            bucket=bucket,
+            upload_to_s3=os.environ['upload_to_s3'],
         )
 
         # 開始進行翻譯
         translate(options)
-
-        # 將檔案上傳到 S3
-        upload_path = '{}/{}'.format(language, os.path.basename(key))
-        s3.upload_file(download_path, bucket, upload_path)
-        logger.info(f"upload file to s3: {upload_path}")
 
         # 刪除 Lambda /tmp 目錄下的檔案
         os.remove(download_path)

@@ -8,6 +8,9 @@ from pathlib import Path
 from book_maker.utils import prompt_config_to_kwargs
 
 from .base_loader import BaseBookLoader
+import boto3
+import logging
+s3 = boto3.client('s3')
 
 
 class SRTBookLoader(BaseBookLoader):
@@ -25,6 +28,9 @@ class SRTBookLoader(BaseBookLoader):
         single_translate=False,
         context_flag=False,
         temperature=1.0,
+        bucket=None,
+        upload_to_s3=False,
+        language_key=None,
     ) -> None:
         self.srt_name = srt_name
         self.translate_model = model(
@@ -47,6 +53,10 @@ class SRTBookLoader(BaseBookLoader):
         self.accumulated_num = 1
         self.blocks = []
         self.single_translate = single_translate
+        self.bucket = bucket
+        self.upload_to_s3 = upload_to_s3
+        self.language = language
+        self.language_key = language_key
 
         self.resume = resume
         self.bin_path = f"{Path(srt_name).parent}/.{Path(srt_name).stem}.temp.bin"
@@ -182,7 +192,8 @@ class SRTBookLoader(BaseBookLoader):
                         temp = self.translate_model.translate(text)
                     except Exception as e:
                         print(e)
-                        raise Exception("Something is wrong when translate") from e
+                        raise Exception(
+                            "Something is wrong when translate") from e
 
                     translated_blocks = self._get_blocks_from(temp)
 
@@ -205,7 +216,8 @@ class SRTBookLoader(BaseBookLoader):
                                     raise Exception(
                                         "Something is wrong when translate"
                                     ) from e
-                                translated_blocks.append(self._get_block_from(temp))
+                                translated_blocks.append(
+                                    self._get_block_from(temp))
 
                             if not self._check_blocks(
                                 translated_blocks, self.blocks[begin:end]
@@ -242,7 +254,7 @@ class SRTBookLoader(BaseBookLoader):
                     break
 
             self.save_file(
-                f"{Path(self.srt_name).parent}/{Path(self.srt_name).stem}_bilingual.srt",
+                f"{Path(self.srt_name).parent}/tmp/{Path(self.srt_name).stem}_bilingual.srt",
                 self.bilingual_result,
             )
 
@@ -261,7 +273,8 @@ class SRTBookLoader(BaseBookLoader):
                     f"{self._get_block_text(block)}\n{text}"
                 )
             else:
-                self.bilingual_temp_result.append(f"{self._get_block_text(block)}\n")
+                self.bilingual_temp_result.append(
+                    f"{self._get_block_text(block)}\n")
 
         self.save_file(
             f"{Path(self.srt_name).parent}/{Path(self.srt_name).stem}_bilingual_temp.srt",
@@ -288,8 +301,19 @@ class SRTBookLoader(BaseBookLoader):
             raise Exception("can not load resume file") from e
 
     def save_file(self, book_path, content):
-        try:
-            with open(book_path, "w", encoding="utf-8") as f:
-                f.write("\n\n".join(content))
-        except:
-            raise Exception("can not save file")
+        if self.upload_to_s3:
+            try:
+                logger = logging.getLogger()
+                upload_path = '{}/{}.srt'.format(self.language_key,
+                                                 Path(self.srt_name).stem)
+                s3.put_object(Body="\n\n".join(content).encode('utf-8'),
+                              Bucket=self.bucket, Key=upload_path)
+                logger.info(f"upload file to s3: {upload_path}")
+            except:
+                raise Exception("can not upload file to s3")
+        else:
+            try:
+                with open(book_path, "w", encoding="utf-8") as f:
+                    f.write("\n\n".join(content))
+            except:
+                raise Exception("can not save file")

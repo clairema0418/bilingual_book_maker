@@ -5,6 +5,9 @@ from bs4 import BeautifulSoup
 from book_maker.utils import prompt_config_to_kwargs
 
 from .base_loader import BaseBookLoader
+import boto3
+import logging
+s3 = boto3.client('s3')
 
 
 class HTMLBookLoader(BaseBookLoader):
@@ -22,6 +25,9 @@ class HTMLBookLoader(BaseBookLoader):
         single_translate=False,
         context_flag=False,
         temperature=1.0,
+        language_key=None,
+        bucket=None,
+        upload_to_s3=False,
     ) -> None:
         self.html_name = html_name
         self.translate_model = model(
@@ -37,7 +43,10 @@ class HTMLBookLoader(BaseBookLoader):
         self.bilingual_temp_result = []
         self.test_num = test_num
         self.batch_size = 10
-        self.single_translate = True
+        self.single_translate = single_translate
+        self.language_key = language_key
+        self.bucket = bucket
+        self.upload_to_s3 = upload_to_s3
 
         try:
             with open(f"{html_name}", encoding="utf-8") as f:
@@ -86,7 +95,7 @@ class HTMLBookLoader(BaseBookLoader):
                     break
 
             self.save_file(
-                f"{Path(self.html_name).parent}/{Path(self.html_name).stem}_bilingual.html",
+                f"{Path(self.html_name).parent}/tmp/{Path(self.html_name).stem}_bilingual.html",
                 soup.prettify(),
             )
 
@@ -131,8 +140,19 @@ class HTMLBookLoader(BaseBookLoader):
             raise Exception("can not load resume file") from e
 
     def save_file(self, book_path, content):
-        try:
-            with open(book_path, "w", encoding="utf-8") as f:
-                f.write(content)
-        except:
-            raise Exception("can not save file")
+        if self.upload_to_s3:
+            try:
+                logger = logging.getLogger()
+                upload_path = '{}/{}.html'.format(
+                    self.language_key, Path(self.html_name).stem)
+                s3.put_object(Body=content.encode('utf-8'),
+                              Bucket=self.bucket, Key=upload_path, ContentType='text/html')
+                logger.info(f"upload file to s3: {upload_path}")
+            except:
+                raise Exception("can not upload file to s3")
+        else:
+            try:
+                with open(book_path, "w", encoding="utf-8") as f:
+                    f.write(content)
+            except:
+                raise Exception("can not save file")

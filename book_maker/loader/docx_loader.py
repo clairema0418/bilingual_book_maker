@@ -1,18 +1,20 @@
 import sys
 from pathlib import Path
-
+from bs4 import BeautifulSoup
+from docx import Document
+import io
 from book_maker.utils import prompt_config_to_kwargs
-
+import os
 from .base_loader import BaseBookLoader
 import boto3
 import logging
 s3 = boto3.client('s3')
 
 
-class TXTBookLoader(BaseBookLoader):
+class DocxBookLoader(BaseBookLoader):
     def __init__(
         self,
-        txt_name,
+        docx_name,
         model,
         key,
         resume,
@@ -22,13 +24,14 @@ class TXTBookLoader(BaseBookLoader):
         test_num=5,
         prompt_config=None,
         single_translate=False,
+        context_flag=False,
         temperature=1.0,
         bucket=None,
         upload_to_s3=False,
-        context_flag=False,
         language_key=None,
+
     ) -> None:
-        self.txt_name = txt_name
+        self.docx_name = docx_name
         self.translate_model = model(
             key,
             language,
@@ -42,21 +45,23 @@ class TXTBookLoader(BaseBookLoader):
         self.bilingual_temp_result = []
         self.test_num = test_num
         self.batch_size = 10
-        self.single_translate = single_translate
+        self.single_translate = True
         self.bucket = bucket
         self.upload_to_s3 = False
         self.language = language
         self.language_key = language_key
 
         try:
-            with open(f"{txt_name}", encoding="utf-8") as f:
-                self.origin_book = f.read().splitlines()
+            doc = Document(docx_name)
+            self.origin_book = ""
+            for paragraph in doc.paragraphs:
+                self.origin_book += paragraph.text + "\n"
 
         except Exception as e:
             raise Exception("can not load file") from e
 
         self.resume = resume
-        self.bin_path = f"{Path(txt_name).parent}/.{Path(txt_name).stem}.temp.bin"
+        self.bin_path = f"{Path(docx_name).parent}/.{Path(docx_name).stem}.temp.bin"
         if self.resume:
             self.load_state()
 
@@ -70,15 +75,12 @@ class TXTBookLoader(BaseBookLoader):
     def make_bilingual_book(self):
         index = 0
         p_to_save_len = len(self.p_to_save)
-
+        logger = logging.getLogger()
         try:
-            sliced_list = [
-                self.origin_book[i: i + self.batch_size]
-                for i in range(0, len(self.origin_book), self.batch_size)
-            ]
-            for i in sliced_list:
-                # fix the format thanks https://github.com/tudoujunha
-                batch_text = "\n".join(i)
+            doc = Document(self.docx_name)
+            p_tags = doc.paragraphs
+            for p_tag in p_tags:
+                batch_text = p_tag.text
                 if self._is_special_text(batch_text):
                     continue
                 if not self.resume or index >= p_to_save_len:
@@ -88,17 +90,19 @@ class TXTBookLoader(BaseBookLoader):
                         print(e)
                         raise Exception(
                             "Something is wrong when translate") from e
+                    p_tag.text = temp
                     self.p_to_save.append(temp)
+                    print(temp)
                     if not self.single_translate:
                         self.bilingual_result.append(batch_text)
                     self.bilingual_result.append(temp)
-                index += self.batch_size
+                index += 1
                 if self.is_test and index > self.test_num:
                     break
 
             self.save_file(
-                f"{Path(self.txt_name).parent}/{Path(self.txt_name).stem}_bilingual.txt",
-                self.bilingual_result,
+                f"{Path(self.docx_name).parent}/tmp/{Path(self.docx_name).stem}.docx",
+                doc,
             )
 
         except (KeyboardInterrupt, Exception) as e:
@@ -110,23 +114,21 @@ class TXTBookLoader(BaseBookLoader):
 
     def _save_temp_book(self):
         index = 0
-        sliced_list = [
-            self.origin_book[i: i + self.batch_size]
-            for i in range(0, len(self.origin_book), self.batch_size)
-        ]
+        soup = BeautifulSoup(self.origin_book, 'html.parser')
+        p_tags = soup.find_all('p')
 
-        for i in range(len(sliced_list)):
-            batch_text = "".join(sliced_list[i])
+        for p_tag in p_tags:
+            batch_text = p_tag.get_text()
             self.bilingual_temp_result.append(batch_text)
-            if self._is_special_text(self.origin_book[i]):
+            if self._is_special_text(batch_text):
                 continue
             if index < len(self.p_to_save):
                 self.bilingual_temp_result.append(self.p_to_save[index])
             index += 1
 
         self.save_file(
-            f"{Path(self.txt_name).parent}/tmp/{Path(self.txt_name).stem}_bilingual_temp.txt",
-            self.bilingual_temp_result,
+            f"{Path(self.docx_name).parent}/{Path(self.docx_name).stem}_bilingual_temp.docx",
+            str(soup),
         )
 
     def _save_progress(self):
@@ -143,20 +145,27 @@ class TXTBookLoader(BaseBookLoader):
         except Exception as e:
             raise Exception("can not load resume file") from e
 
-    def save_file(self, book_path, content):
+    def save_file(self, book_path, doc):
+        logger = logging.getLogger()
         if self.upload_to_s3:
             try:
-                logger = logging.getLogger()
-                upload_path = '{}/{}.txt'.format(self.language_key,
-                                                 Path(self.txt_name).stem)
-                s3.put_object(Body="\n".join(content).encode('utf-8'),
-                              Bucket=self.bucket, Key=upload_path)
+                upload_path = '{}/{}.docx'.format(
+                    self.language_key, Path(self.docx_name).stem)
+                doc_content = io.StringIO()
+                doc.save(doc_content)
+                # Move the cursor to the beginning of the StringIO object
+                doc_content.seek(0)
+                # s3.put_object(Body=doc_content.read().decode('utf-8'),
+                #               Bucket=self.bucket, Key=upload_path)
                 logger.info(f"upload file to s3: {upload_path}")
-            except:
-                raise Exception("can not upload file to s3")
+                os.remove(book_path)
+                logger.info(f"delete file: {book_path}")
+
+            except (Exception) as e:
+                print(e)
         else:
             try:
-                with open(book_path, "w", encoding="utf-8") as f:
-                    f.write("\n".join(content))
-            except:
-                raise Exception("can not save file")
+                doc.save(book_path)
+                logger.info(f"save file: {book_path}")
+            except (Exception) as e:
+                print(e)

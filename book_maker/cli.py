@@ -334,6 +334,7 @@ So you are close to reaching the limit. You have to choose your own value, there
         API_KEY,
         options.resume,
         language=language,
+        language_key=options.language,
         model_api_base=model_api_base,
         is_test=options.test,
         test_num=options.test_num,
@@ -341,6 +342,7 @@ So you are close to reaching the limit. You have to choose your own value, there
         single_translate=options.single_translate,
         context_flag=options.context_flag,
         temperature=options.temperature,
+        upload_to_s3=True,
     )
     # other options
     if options.allow_navigable_strings:
@@ -663,6 +665,7 @@ So you are close to reaching the limit. You have to choose your own value, there
         API_KEY,
         options.resume,
         language=language,
+        language_key=input_options.language,
         model_api_base=model_api_base,
         is_test=options.test,
         test_num=options.test_num,
@@ -670,6 +673,8 @@ So you are close to reaching the limit. You have to choose your own value, there
         single_translate=input_options.single_translate,
         context_flag=options.context_flag,
         temperature=options.temperature,
+        bucket=input_options.bucket,
+        upload_to_s3=input_options.upload_to_s3,
     )
     # other options
     if options.allow_navigable_strings:
