@@ -429,7 +429,12 @@ def translate(input_options):
         type=str,
         help="you can find claude key from here (https://console.anthropic.com/account/keys)",
     )
-
+    parser.add_argument(
+        "--api_url",
+        dest="api_url",
+        type=str,
+        default="",
+    )
     parser.add_argument(
         "--test",
         dest="test",
@@ -675,6 +680,7 @@ So you are close to reaching the limit. You have to choose your own value, there
         temperature=options.temperature,
         bucket=input_options.bucket,
         upload_to_s3=input_options.upload_to_s3,
+        api_url=input_options.api_url,
     )
     # other options
     if options.allow_navigable_strings:

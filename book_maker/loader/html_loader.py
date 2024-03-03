@@ -7,6 +7,8 @@ from book_maker.utils import prompt_config_to_kwargs
 from .base_loader import BaseBookLoader
 import boto3
 import logging
+import requests
+import json
 s3 = boto3.client('s3')
 
 
@@ -28,6 +30,7 @@ class HTMLBookLoader(BaseBookLoader):
         language_key=None,
         bucket=None,
         upload_to_s3=False,
+        api_url=None,
     ) -> None:
         self.html_name = html_name
         self.translate_model = model(
@@ -47,6 +50,7 @@ class HTMLBookLoader(BaseBookLoader):
         self.language_key = language_key
         self.bucket = bucket
         self.upload_to_s3 = upload_to_s3
+        self.api_url = api_url
 
         try:
             with open(f"{html_name}", encoding="utf-8") as f:
@@ -73,7 +77,7 @@ class HTMLBookLoader(BaseBookLoader):
 
         try:
             soup = BeautifulSoup(self.origin_book, 'html.parser')
-            p_tags = soup.find_all('p')
+            p_tags = soup.find_all(['p', 'h1', 'h2', 'h3'])
             for p_tag in p_tags:
                 batch_text = p_tag.get_text()
                 if self._is_special_text(batch_text):
@@ -85,6 +89,7 @@ class HTMLBookLoader(BaseBookLoader):
                         print(e)
                         raise Exception(
                             "Something is wrong when translate") from e
+
                     p_tag.string = temp
                     self.p_to_save.append(temp)
                     if not self.single_translate:
@@ -147,7 +152,20 @@ class HTMLBookLoader(BaseBookLoader):
                     self.language_key, Path(self.html_name).stem)
                 s3.put_object(Body=content.encode('utf-8'),
                               Bucket=self.bucket, Key=upload_path, ContentType='text/html')
+
                 logger.info(f"upload file to s3: {upload_path}")
+
+                payload = {
+                    "filename": Path(self.html_name).stem,
+                    "translated": True
+                }
+                headers = {'Content-Type': 'application/json'}
+                response = requests.post(
+                    self.api_url, data=json.dumps(payload), headers=headers)
+                if response.status_code == 200:
+                    logger.info("API call successful")
+                else:
+                    logger.error("API call failed")
             except:
                 raise Exception("can not upload file to s3")
         else:

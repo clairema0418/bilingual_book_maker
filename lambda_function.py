@@ -34,6 +34,7 @@ def handler(event, context):
             single_translate=os.environ['single_translate'],
             bucket=bucket,
             upload_to_s3=os.environ['upload_to_s3'],
+            api_url=os.environ['api_url'],
         )
 
         # 開始進行翻譯
