@@ -12,6 +12,8 @@ import pdfplumber
 import logging
 import boto3
 import io
+from docx import Document
+from fpdf import FPDF
 s3 = boto3.client('s3')
 
 
@@ -28,7 +30,7 @@ class PdfBookLoader(BaseBookLoader):
         test_num=5,
         prompt_config=None,
         temperature=1.0,
-        single_translate=False,
+        single_translate=True,
         context_flag=False,
         bucket=None,
         upload_to_s3=False,
@@ -49,8 +51,8 @@ class PdfBookLoader(BaseBookLoader):
         self.test_num = test_num
         self.batch_size = 10
         self.bucket = bucket
-        self.single_translate = False
-        self.upload_to_s3 = upload_to_s3
+        self.single_translate = True
+        self.upload_to_s3 = False  # upload_to_s3
         self.language_key = language_key
 
         print(pdf_name)
@@ -80,6 +82,8 @@ class PdfBookLoader(BaseBookLoader):
         index = 0
         p_to_save_len = len(self.p_to_save)
         logger = logging.getLogger()
+
+        doc = Document()  # Create a new Word document
         try:
             pdf = PdfReader(open(self.pdf_name, 'rb'))
             pdf_writer = PdfWriter()
@@ -106,25 +110,29 @@ class PdfBookLoader(BaseBookLoader):
                             "Something is wrong when translating") from e
 
                     # Create a new page with the same size as the original page
-                    new_page = canvas.Canvas(io.BytesIO())
-                    new_page.setPageSize(
-                        (page.mediabox.width, page.mediabox.height))
+                    # new_page = canvas.Canvas(io.BytesIO())
+                    # new_page.setPageSize(
+                    #     (page.mediabox.width, page.mediabox.height))
 
-                    # Draw the translated text on the new page
-                    # Adjust the coordinates as needed
-                    x_position = 100  # X-coordinate remains the same
-                    y_position = 700  # Initial Y-coordinate (adjust as needed)
-                    line_height = 12  # Adjust the line height as needed
-                    for line in translated_text.split('\n'):
-                        new_page.drawString(x_position, y_position, line)
-                        y_position -= line_height
-                    new_page.showPage()
-                    new_page.save()
+                    # # Draw the translated text on the new page
+                    # # Adjust the coordinates as needed
+                    # x_position = 100  # X-coordinate remains the same
+                    # y_position = 700  # Initial Y-coordinate (adjust as needed)
+                    # line_height = 12  # Adjust the line height as needed
+                    # for line in translated_text:
+                    #     # if line.strip():
+                    #     # pdf.cell(0, 10, txt=line.encode(
+                    #     #     'latin-1', 'replace').decode('latin-1'), ln=True)
+                    #     new_page.drawString(x_position, y_position, line)
+                    #     y_position -= line_height
 
-                    # Merge the new page into the output PDF
-                    new_page_pdf = PdfReader(
-                        io.BytesIO(new_page.getpdfdata()))
-                    page.merge_page(new_page_pdf.pages[0])
+                    # new_page.showPage()
+                    # new_page.save()
+
+                    # # Merge the new page into the output PDF
+                    # new_page_pdf = PdfReader(
+                    #     io.BytesIO(new_page.getpdfdata()))
+                    # page.merge_page(new_page_pdf.pages[0])
 
                     self.p_to_save.append(translated_text)
 
@@ -132,16 +140,20 @@ class PdfBookLoader(BaseBookLoader):
                         self.bilingual_result.append(page_text)
                     self.bilingual_result.append(translated_text)
 
-                pdf_writer.add_page(page)
+                # pdf_writer.add_page(page)
                 index += 1
 
                 if self.is_test and index > self.test_num:
                     break
 
             output_file = f"{Path(self.pdf_name).parent}/tmp/{Path(self.pdf_name).stem}_bilingual.pdf"
-            print("output_file", output_file)
+            # print("output_file", output_file)
             with open(output_file, 'wb') as output_pdf:
                 pdf_writer.write(output_pdf)
+            self.save_file(
+                output_file,
+                self.bilingual_result,
+            )
 
         except (KeyboardInterrupt, Exception) as e:
             print(e)
@@ -166,6 +178,7 @@ class PdfBookLoader(BaseBookLoader):
 
         upload_path = '{}/{}.pdf'.format(self.language_key,
                                          Path(self.pdf_name).stem)
+
         self.save_file(
             upload_path,
             str(soup),
@@ -197,6 +210,7 @@ class PdfBookLoader(BaseBookLoader):
                 os.remove(book_path)
                 logger.info(f"delete file: {book_path}")
             except (Exception) as e:
+                print("儲存檔案失敗")
                 print(e)
         else:
             try:
@@ -210,17 +224,34 @@ class PdfBookLoader(BaseBookLoader):
                             pdf = FPDF()
                             pdf.add_page()
                             pdf.set_font("Arial", size=12)
-                            for line in content.split("\n"):
-                                # Use 'latin-1' encoding
-                                pdf.cell(0, 10, txt=line.encode(
+                            paragraphs = [content[i:i+100]
+                                          for i in range(0, len(content), 100)]
+
+                            for paragraph in paragraphs:
+                                # if paragraph.strip():
+                                print("寫入pdf段落:", paragraph)
+                                pdf.cell(0, 10, txt=paragraph.encode(
                                     'latin-1', 'replace').decode('latin-1'), ln=True)
+                                pdf.ln()
+                            # Only write translated text, ignore empty lines
+                            # for line in content:
+                            #     # if line.strip():
+                            #     print("寫入pdf:", line)
+                            #     pdf.cell(0, 10, txt=line.encode(
+                            #         'latin-1', 'replace').decode('latin-1'), ln=True)
+                            #     pdf.ln()
+                            print("pdf路徑:", book_path)
                             pdf.output(book_path, "F")  # Save as PDF
-                        except:
-                            raise Exception("can not save file")
+                        except Exception as e:
+                            print("e", e)
+                            raise Exception("Unable to save file") from e
 
                 pdf = PDF()
                 # Call the 'save_file' method of the PDF class
+                print("pdf路徑2:", book_path)
                 pdf.save_file(book_path, content)
-
+                txt_book_path = f"{Path(self.pdf_name).parent}/tmp/{Path(self.pdf_name).stem}_bilingual.txt"
+                with open(txt_book_path, "w", encoding="utf-8") as f:
+                    f.write("\n".join(content))
             except:
                 raise Exception("can not save file")

@@ -11,7 +11,7 @@ BOOK_LOADER_DICT = {
     "txt": TXTBookLoader,
     "srt": SRTBookLoader,
     "html": HTMLBookLoader,
-    #   "pdf": PdfBookLoader,
+    # "pdf": PdfBookLoader,
     "docx": DocxBookLoader,
     "csv": CSVBookLoader,
     # TODO add more here
