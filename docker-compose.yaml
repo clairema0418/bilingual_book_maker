@@ -19,6 +19,7 @@ services:
       azure_deployment_id: ${azure_deployment_id}
       prompt: ${prompt}
       single_translate: true
+      api_url: ${api_url}
     command:
       [
         "--book_name",
@@ -31,9 +32,9 @@ services:
         "${azure_api_base}",
         "--deployment_id",
         "${azure_deployment_id}",
-        "--single_translate",
-        "${single_translate}",
         "--prompt",
         "${prompt}",
         "--test",
+        "--api_url",
+        "${api_url}",
       ]

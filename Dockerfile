@@ -9,7 +9,7 @@ RUN pip install --upgrade pip \
    && pip install --no-cache-dir -r requirements.txt
 
 COPY . .
-# # Set the CMD to your handler (could also be done as a parameter override outside of the Dockerfile)
+# Set the CMD to your handler (could also be done as a parameter override outside of the Dockerfile)
 CMD [ "lambda_function.handler" ]
-# # ENTRYPOINT ["python3", "make_book.py"]
+# ENTRYPOINT ["python3", "make_book.py"]
 
