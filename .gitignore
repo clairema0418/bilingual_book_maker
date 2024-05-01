@@ -134,3 +134,8 @@ dmypy.json
 /test_books/*.epub
 log/
 .chatgpt_cache.json
+*.docx
+*.txt
+*.epub
+*.json
+/lambda
